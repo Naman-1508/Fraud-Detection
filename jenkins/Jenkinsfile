@@ -1,0 +1,82 @@
+pipeline {
+    agent any
+
+    environment {
+        REGISTRY = "docker.io"
+        IMAGE = "naman1514/fraud-detection"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git 'https://github.com/Naman-1508/Fraud-Detection.git'
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                withSonarQubeEnv('Sonar') {
+                    sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=fraud-detection \
+                          -Dsonar.sources=./src \
+                          -Dsonar.host.url=http://localhost:9000
+                    """
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    docker build -t ${IMAGE}:${BUILD_NUMBER} .
+                """
+            }
+        }
+
+        stage('Trivy Security Scan') {
+            steps {
+                sh """
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE}:${BUILD_NUMBER}
+                """
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    sh """
+                        echo "$PASS" | docker login -u "$USER" --password-stdin
+                    """
+                }
+            }
+        }
+
+        stage('Push Image to DockerHub') {
+            steps {
+                sh """
+                    docker push ${IMAGE}:${BUILD_NUMBER}
+                """
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh """
+                    kubectl apply -f k8s/namespace.yaml
+                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f k8s/service.yaml
+                    kubectl apply -f k8s/hpa.yaml
+                    kubectl apply -f k8s/ingress.yaml
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully!"
+        }
+    }
+}
