@@ -4,16 +4,16 @@ pipeline {
     environment {
         REGISTRY = "docker.io"
         IMAGE = "naman1514/fraud-detection"
+        DOCKER_HOST_CMD = "docker -H tcp://host.docker.internal:2375"
     }
 
     stages {
 
         stage('Checkout Code') {
-    steps {
-        git branch: 'main', url: 'https://github.com/Naman-1508/Fraud-Detection.git'
-    }
-}
-
+            steps {
+                git branch: 'main', url: 'https://github.com/Naman-1508/Fraud-Detection.git'
+            }
+        }
 
         stage('SonarQube Scan') {
             steps {
@@ -31,7 +31,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh """
-                    docker build -t ${IMAGE}:${BUILD_NUMBER} .
+                    ${DOCKER_HOST_CMD} build -t ${IMAGE}:${BUILD_NUMBER} .
                 """
             }
         }
@@ -48,7 +48,7 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     sh """
-                        echo "$PASS" | docker login -u "$USER" --password-stdin
+                        echo "$PASS" | ${DOCKER_HOST_CMD} login -u "$USER" --password-stdin
                     """
                 }
             }
@@ -57,7 +57,7 @@ pipeline {
         stage('Push Image to DockerHub') {
             steps {
                 sh """
-                    docker push ${IMAGE}:${BUILD_NUMBER}
+                    ${DOCKER_HOST_CMD} push ${IMAGE}:${BUILD_NUMBER}
                 """
             }
         }
